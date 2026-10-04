@@ -67,12 +67,23 @@ O workflow publica somente os arquivos estáticos do frontend; não envia o back
 
 O frontend pode ser instalado como aplicativo pelo Chrome em HTTPS. O manifesto e o service worker são gerados no build com o mesmo `VITE_BASE_PATH` do site; no GitHub Pages, o início e o escopo ficam em `/Nexus-/`. O service worker pré-armazena os arquivos estáticos versionados e a página inicial para uso offline básico, sem armazenar respostas de API. Builds de desenvolvimento e runtimes nativos do Capacitor não registram service worker.
 
+## Arquitetura de voz
+
+O fluxo de conversa permanece separado dos mecanismos de áudio: `VoiceService` inicia/interrompe a escuta e entrega transcrições ou erros; a interface decide quando enviar o texto ao serviço do assistente; `SpeechSynthesisService` reproduz respostas separadamente. Nenhum áudio é enviado ao Gemini por essa arquitetura.
+
+O contrato `VoiceService` permite trocar o provedor sem acoplar a tela à IA. No navegador, `BrowserVoiceRecognitionService` adapta a API Speech Recognition do próprio navegador. Essa API combina captura do microfone e reconhecimento de fala e não expõe o áudio bruto para um pipeline próprio; portanto, o navegador/dispositivo controla o provedor de transcrição, que pode depender de rede e não é necessariamente local. A separação de captura de baixo nível e STT local ainda exige uma implementação nativa ou outra API de áudio que forneça os frames de áudio.
+
+A permissão é solicitada pelo sistema/browser quando a captura começa. No Android Capacitor, `RECORD_AUDIO` está declarado no manifesto e o Bridge do Capacitor solicita a permissão runtime quando o WebView pede acesso ao áudio. Reconhecimento não suportado ou permissão negada é informado como erro; nenhuma gravação é persistida pela aplicação.
+
+A palavra de ativação atual é experimental e usa reconhecimento contínuo do navegador somente enquanto a interface está aberta. Não é um detector local dedicado nem uma funcionalidade confiável em segundo plano. A arquitetura de ativação (`WakeWordService`) está desacoplada do assistente, mas ainda falta um motor local de palavra-chave e uma implementação Android nativa para captura controlada em segundo plano. Essa etapa futura exigirá consentimento e permissões explícitas, serviço em primeiro plano com notificação persistente e conformidade com as restrições de bateria/execução do Android; o sistema pode interrompê-la. Não funcionará com o telefone completamente desligado e não será implementada nesta etapa.
+
 ## Etapa atual
 
 - A interface visual do N.E.X.U.S. usa um fundo escuro, uma paleta azul e um Nexus Core 3D como elemento principal da identidade do produto.
 - O Nexus Core reflete os estados `idle`, `waiting-for-wake-word`, `listening`, `processing`, `speaking`, `paused` e `error` com animações suaves e futuristas.
 - O estado de fala usa respiração aberta/fechada para dar sensação de presença; o estado de escuta aplica pulsos discretos; o processamento é mais energético; os estados de pausa e erro reduzem a atividade ou sinalizam indisponibilidade sem criar ruído visual extra.
-- O layout da interface mantém o chat, o campo de mensagem, o microfone, os controles de voz/TTS e o controle da palavra de ativação integrados ao mesmo conjunto visual blue-on-dark.
+- A tela inicial mobile-first centraliza o Nexus Core azul; os ícones de chat e microfone abrem painéis na mesma tela, mantendo o Core visível.
+- O painel de voz só indica microfone ativo após o evento real de início do reconhecimento; estados de solicitação de permissão, indisponibilidade e erro são apresentados separadamente.
 - A composição é responsiva para celular, tablet e desktop e respeita `prefers-reduced-motion` para evitar movimento excessivo.
 - O fluxo `/api/chat` integra `AssistantService` → `ToolRegistry` → `Tool` → resultado verificado → Gemini; pedidos que não correspondem a um comando de ferramenta continuam no fluxo normal do chat.
 - O `ToolRegistry` oferece `get_current_time` e `get_current_date` (UTC), `calculator` (parser aritmético limitado, sem `eval` ou execução de código) e `get_assistant_status` (sem expor segredos), além dos comandos locais de memória e resumo já existentes.
@@ -87,13 +98,13 @@ O frontend pode ser instalado como aplicativo pelo Chrome em HTTPS. O manifesto 
 - Propostas precisam passar por `draft` → `pending_review` → aprovação explícita. A única alteração aplicável é o estilo de resposta allowlisted; código, credenciais, permissões, integrações, segurança, confirmações, logs e supervisão não podem ser alterados por ferramentas.
 - Feedback e aprendizado não autorizam mudanças automaticamente. Não existe execução irrestrita nem escrita automática no código-fonte; os registros desta camada não persistem após reiniciar o servidor.
 - Os primeiros comandos baseados em ferramenta são locais e seguros: lembrar um fato, consultar memórias e resumir o contexto recente da conversa. Nenhuma ferramenta externa, automação, Android nativo ou API key do frontend foi adicionada.
-- A interface continua sendo uma camada web local e visual; não há sons, músicas, wake word nativa Android, escuta em segundo plano ou serviços de áudio em background.
+- Não há wake word nativa Android nem serviço de áudio em segundo plano; o reconhecimento existente depende das APIs e limitações do navegador.
 
 ## Estrutura
 
 - `src/app/`: composição e estilos da aplicação.
 - `src/features/assistant/domain/`: tipos e contrato do serviço do assistente.
-- `src/features/assistant/services/`: comunicação HTTP, reconhecimento e síntese de voz do navegador, serviço abstrato da palavra de ativação e armazenamento local opcional de memórias explícitas, desacoplados do provedor.
+- `src/features/assistant/services/`: comunicação HTTP, contrato e fábrica de provedores de voz, adaptador de reconhecimento do navegador, síntese de voz, serviço abstrato experimental da palavra de ativação e armazenamento local opcional de memórias explícitas, desacoplados do provedor.
 - `src/features/assistant/components/`: componentes visuais do chat e do Nexus Core.
 - `server/assistant/`: integração com Gemini e personalidade do N.E.X.U.S.
 - `server/assistant/assistantService.mjs`: orquestração da requisição, roteamento e passagem de resultados locais ao Gemini.
@@ -104,4 +115,4 @@ O frontend pode ser instalado como aplicativo pelo Chrome em HTTPS. O manifesto 
 - `server/index.mjs`: API protegida e servidor local.
 - `src/main.tsx`: ponto de entrada React.
 
-O roadmap atual termina na camada de autodesenvolvimento supervisionado: alterações estruturais continuam exigindo implementação e revisão humanas. Funcionamento com tela bloqueada ou aplicativo fechado, wake word nativa Android, escuta em segundo plano, voz personalizada/clonagem, integrações reais e autodesenvolvimento irrestrito permanecem fora do escopo.
+O roadmap atual termina na camada de autodesenvolvimento supervisionado: alterações estruturais continuam exigindo implementação e revisão humanas. Um motor local de wake word, execução controlada em segundo plano no Android, voz personalizada/clonagem, integrações reais e autodesenvolvimento irrestrito permanecem fora do escopo atual.

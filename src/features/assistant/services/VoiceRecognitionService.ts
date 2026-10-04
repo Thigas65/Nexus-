@@ -1,3 +1,5 @@
+import type { VoiceService, VoiceServiceHandlers } from "./VoiceService";
+
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
 }
@@ -27,6 +29,7 @@ interface SpeechRecognitionLike {
   continuous: boolean;
   maxAlternatives: number;
   onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onstart: (() => void) | null;
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
   start(): void;
@@ -42,13 +45,6 @@ type RecognitionWindow = Window & {
   SpeechRecognition?: SpeechRecognitionConstructor;
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 };
-
-export interface VoiceRecognitionHandlers {
-  onTranscript: (transcript: string) => void;
-  onFinalTranscript?: (transcript: string) => void;
-  onError: (error: Error) => void;
-  onEnd: () => void;
-}
 
 function getRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
   if (typeof window === "undefined") return undefined;
@@ -89,9 +85,10 @@ class VoiceRecognitionError extends Error {
   }
 }
 
-export class BrowserVoiceRecognitionService {
+export class BrowserVoiceRecognitionService implements VoiceService {
   private recognition: SpeechRecognitionLike | null = null;
   private readonly createRecognition: () => SpeechRecognitionLike | undefined;
+  private listening = false;
 
   constructor(
     createRecognition: () => SpeechRecognitionLike | undefined = () => {
@@ -106,7 +103,11 @@ export class BrowserVoiceRecognitionService {
     return getRecognitionConstructor() !== undefined;
   }
 
-  start(handlers: VoiceRecognitionHandlers): void {
+  isListening(): boolean {
+    return this.listening;
+  }
+
+  startListening(handlers: VoiceServiceHandlers): void {
     const recognition = this.createRecognition();
     if (!recognition) {
       throw new Error("O reconhecimento de voz não é compatível com este navegador.");
@@ -118,6 +119,11 @@ export class BrowserVoiceRecognitionService {
     recognition.interimResults = true;
     recognition.continuous = false;
     recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      if (this.recognition !== recognition) return;
+      this.listening = true;
+      handlers.onStart?.();
+    };
     recognition.onresult = (event) => {
       const results = Array.from(
         { length: event.results.length },
@@ -135,6 +141,7 @@ export class BrowserVoiceRecognitionService {
       if (finalTranscript) handlers.onFinalTranscript?.(finalTranscript);
     };
     recognition.onerror = (event) => {
+      this.listening = false;
       handlers.onError(new VoiceRecognitionError(
         getRecognitionErrorMessage(event.error),
         event.error,
@@ -142,6 +149,7 @@ export class BrowserVoiceRecognitionService {
     };
     recognition.onend = () => {
       if (this.recognition === recognition) this.recognition = null;
+      this.listening = false;
       handlers.onEnd();
     };
 
@@ -149,16 +157,27 @@ export class BrowserVoiceRecognitionService {
       recognition.start();
     } catch {
       if (this.recognition === recognition) this.recognition = null;
+      this.listening = false;
       throw new Error("Não foi possível iniciar o reconhecimento de voz.");
     }
   }
 
-  stop(): void {
+  stopListening(): void {
     this.recognition?.stop();
+  }
+
+  start(handlers: VoiceServiceHandlers): void {
+    this.startListening(handlers);
+  }
+
+  stop(): void {
+    this.stopListening();
   }
 
   cancel(): void {
     if (!this.recognition) return;
+    this.listening = false;
+    this.recognition.onstart = null;
     this.recognition.onresult = null;
     this.recognition.onerror = null;
     this.recognition.onend = null;

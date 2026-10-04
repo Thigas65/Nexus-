@@ -36,6 +36,32 @@ test("reports interim and final transcripts separately", () => {
   assert.deepEqual(finalTranscripts, ["N.E.X.U.S."]);
 });
 
+test("reports listening only after the browser confirms recognition started", () => {
+  const recognition = new FakeRecognition();
+  const service = new BrowserVoiceRecognitionService(() => recognition);
+  let listeningStarted = false;
+  service.start({
+    onTranscript: () => {},
+    onStart: () => {
+      listeningStarted = true;
+    },
+    onError: (error) => assert.fail(error.message),
+    onEnd: () => {},
+  });
+
+  assert.equal(service.isListening(), false);
+  assert.equal(listeningStarted, false);
+
+  recognition.onstart?.();
+
+  assert.equal(service.isListening(), true);
+  assert.equal(listeningStarted, true);
+
+  recognition.onend?.();
+
+  assert.equal(service.isListening(), false);
+});
+
 test("maps browser errors to clear messages while preserving their codes", () => {
   const recognition = new FakeRecognition();
   const service = new BrowserVoiceRecognitionService(() => recognition);
