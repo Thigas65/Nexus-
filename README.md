@@ -59,9 +59,13 @@ npm run preview
 
 ## Publicação do frontend no GitHub Pages
 
-O workflow `.github/workflows/deploy-pages.yml` publica automaticamente o conteúdo de `dist/` no GitHub Pages a cada push na branch `main`. Ele usa `/Nexus-/` como base para o endereço de projeto `https://SEU_USUARIO.github.io/Nexus-/`; se o repositório for renomeado, ajuste `VITE_BASE_PATH` no workflow para o novo caminho. Builds locais continuam usando `/` por padrão, e `dist/` também continua sendo a pasta usada pelo Capacitor.
+Em **Settings → Pages → Build and deployment**, selecione **GitHub Actions** como origem de publicação. O workflow `.github/workflows/deploy-pages.yml` publica automaticamente o conteúdo compilado de `dist/` no GitHub Pages a cada push na branch `main`. Ele usa `/Nexus-/` como base para o endereço de projeto `https://SEU_USUARIO.github.io/Nexus-/`; se o repositório for renomeado, ajuste `VITE_BASE_PATH` no workflow para o novo caminho. Builds locais continuam usando `/` por padrão, e `dist/` também continua sendo a pasta usada pelo Capacitor.
 
 O workflow publica somente os arquivos estáticos do frontend; não envia o backend, `node_modules` ou arquivos `.env`. O backend e sua configuração de credenciais permanecem separados. O chat publicado precisa de um backend acessível pela web, configurado no campo “Endpoint do backend”; esta etapa não hospeda o backend nem aponta o APK para uma hospedagem remota.
+
+## Aplicativo web progressivo (PWA)
+
+O frontend pode ser instalado como aplicativo pelo Chrome em HTTPS. O manifesto e o service worker são gerados no build com o mesmo `VITE_BASE_PATH` do site; no GitHub Pages, o início e o escopo ficam em `/Nexus-/`. O service worker pré-armazena os arquivos estáticos versionados e a página inicial para uso offline básico, sem armazenar respostas de API. Builds de desenvolvimento e runtimes nativos do Capacitor não registram service worker.
 
 ## Etapa atual
 
