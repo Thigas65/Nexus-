@@ -31,6 +31,16 @@ npm start
 
 O servidor entrega a interface compilada e atende `/api/chat` na mesma origem. A porta pode ser configurada pela variável `PORT`.
 
+## Publicação na Netlify
+
+O arquivo `netlify.toml` configura o build do frontend e publica `netlify/functions/chat.mjs` e `netlify/functions/health.mjs` como as rotas `/api/chat` e `/api/health`. As Functions reutilizam o handler e o `AssistantService` existentes; o servidor Node local continua disponível por `npm start`.
+
+Configure `GEMINI_API_KEY` como variável privada das Functions no painel do site Netlify. Não use o prefixo `VITE_`, não a disponibilize ao build do frontend e não a inclua no repositório. `GEMINI_MODEL` continua opcional. Se frontend e backend estiverem no mesmo site Netlify, o frontend pode usar as rotas relativas no mesmo domínio. Se estiverem em sites separados, configure `VITE_BACKEND_URL` no ambiente de build do frontend com a URL HTTPS base do site que hospeda as Functions e configure `CORS_ALLOWED_ORIGINS` no backend com a origem HTTPS exata do frontend.
+
+`VITE_BACKEND_URL` é configuração pública incorporada ao build do frontend; alterá-la exige novo build. O estado mantido em memória pelos registries do assistente pode não persistir entre chamadas das Functions, pois a Netlify não garante que chamadas diferentes sejam atendidas pela mesma instância.
+
+Para o frontend hospedado no GitHub Pages, configure a variável **Actions** `NEXUS_BACKEND_URL` em **Settings → Secrets and variables → Actions → Variables** com a URL base HTTPS do backend; o workflow a injeta como `VITE_BACKEND_URL` durante o build. Essa URL não é secreta e fica incorporada no frontend publicado. Também é possível configurar/alterar a URL em **Configurações → Endpoint do backend**, que tem precedência no navegador, ou usar `VITE_BACKEND_URL` no ambiente local de build. O backend deve ser publicado separadamente em um host HTTPS acessível pelo dispositivo e permitir a origem exata `https://thigas65.github.io` em `CORS_ALLOWED_ORIGINS`. No emulador Android, `10.0.2.2:3001` aponta para a máquina host; se necessário, inicie o servidor com `HOST=0.0.0.0`. A chave Gemini permanece somente no ambiente do backend e não deve ser definida em GitHub Actions, variáveis `VITE_*`, Capacitor ou configuração do APK.
+
 ## Testar a conexão
 
 Com o servidor em execução, verifique se está ativo e se a chave foi carregada:
