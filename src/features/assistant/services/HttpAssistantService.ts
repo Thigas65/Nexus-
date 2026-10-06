@@ -10,6 +10,7 @@ interface ChatResponse {
 
 const BACKEND_URL_STORAGE_KEY = "nexus-backend-url";
 const DEFAULT_LOCAL_BACKEND_URL = "http://10.0.2.2:3001";
+const CONFIGURED_BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim();
 
 function readStoredBackendUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -20,6 +21,7 @@ function readStoredBackendUrl(): string | null {
 export function resolveBackendUrl(): string {
   const storedUrl = readStoredBackendUrl();
   if (storedUrl) return storedUrl.replace(/\/$/, "");
+  if (CONFIGURED_BACKEND_URL) return CONFIGURED_BACKEND_URL.replace(/\/$/, "");
 
   if (typeof window === "undefined") {
     return DEFAULT_LOCAL_BACKEND_URL;
