@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import chat from "../netlify/functions/chat.mjs";
 import health from "../netlify/functions/health.mjs";
+import { GeminiApiError } from "./assistant/geminiClient.mjs";
 import { handleApiRequest } from "./chatHandler.mjs";
 
 test("shared chat handler validates input and delegates to the assistant", async () => {
@@ -46,6 +47,25 @@ test("shared chat handler preserves request validation and health response", asy
   assert.equal(status.body.status, "ok");
   assert.equal(typeof status.body.configured, "boolean");
   assert.equal("key" in status.body, false);
+});
+
+test("chat handler returns only Gemini status and sanitized error message", async () => {
+  const result = await handleApiRequest({
+    pathname: "/api/chat",
+    method: "POST",
+    body: JSON.stringify({ message: "Olá" }),
+    assistant: {
+      async respond() {
+        throw new GeminiApiError("Invalid API key: [REDACTED]", 503, 403);
+      },
+    },
+  });
+
+  assert.equal(result.statusCode, 503);
+  assert.deepEqual(result.body, {
+    status: 403,
+    message: "Invalid API key: [REDACTED]",
+  });
 });
 
 test("Netlify Functions expose the shared API behavior through Fetch requests", async () => {

@@ -13,6 +13,14 @@ export class AssistantError extends Error {
   }
 }
 
+export class GeminiApiError extends AssistantError {
+  constructor(message, statusCode, geminiStatus) {
+    super(message, statusCode);
+    this.name = "GeminiApiError";
+    this.geminiStatus = geminiStatus;
+  }
+}
+
 export async function generateResponse(
   message,
   {
@@ -101,12 +109,20 @@ export async function generateResponse(
   if (!response.ok) {
     let geminiErrorMessage;
     try {
-      const errorBody = await response.clone().json();
-      if (typeof errorBody.error?.message === "string") {
-        geminiErrorMessage = errorBody.error.message.replaceAll(
-          apiKey.trim(),
-          "[REDACTED]",
-        );
+      const errorBody = (await response.clone().text()).replaceAll(
+        apiKey.trim(),
+        "[REDACTED]",
+      );
+      try {
+        const parsedErrorBody = JSON.parse(errorBody);
+        geminiErrorMessage = typeof parsedErrorBody.error?.message === "string"
+          ? parsedErrorBody.error.message
+          : errorBody;
+      } catch {
+        geminiErrorMessage = errorBody;
+      }
+      if (!geminiErrorMessage) {
+        geminiErrorMessage = "Não foi possível ler a mensagem de erro do Gemini.";
       }
     } catch {
       geminiErrorMessage = "Não foi possível ler a mensagem de erro do Gemini.";
@@ -117,27 +133,13 @@ export async function generateResponse(
     });
 
     if (response.status === 401 || response.status === 403) {
-      throw new AssistantError(
-        "A autenticação do Gemini não está válida. Verifique a configuração do backend.",
-        503,
-      );
-    }
-    if (response.status === 429) {
-      throw new AssistantError(
-        "O limite de solicitações do Gemini foi atingido. Tente novamente em instantes.",
-        503,
-      );
-    }
-    if (response.status >= 500) {
-      throw new AssistantError(
-        "O Gemini está temporariamente indisponível. Tente novamente em instantes.",
-        503,
-      );
+      throw new GeminiApiError(geminiErrorMessage, 503, response.status);
     }
 
-    throw new AssistantError(
-      "O Gemini não aceitou a solicitação. Verifique a chave e tente novamente.",
-      502,
+    throw new GeminiApiError(
+      geminiErrorMessage,
+      response.status === 429 || response.status >= 500 ? 503 : 502,
+      response.status,
     );
   }
 

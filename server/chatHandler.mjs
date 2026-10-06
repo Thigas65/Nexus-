@@ -1,4 +1,4 @@
-import { AssistantError } from "./assistant/geminiClient.mjs";
+import { AssistantError, GeminiApiError } from "./assistant/geminiClient.mjs";
 import { AssistantService } from "./assistant/assistantService.mjs";
 import { getCorsDecision, parseAllowedOrigins } from "./cors.mjs";
 
@@ -118,6 +118,12 @@ export async function handleApiRequest({
       const reply = await assistant.respond(message, { context });
       return jsonResponse(200, { reply }, cors.headers);
     } catch (error) {
+      if (error instanceof GeminiApiError) {
+        return jsonResponse(error.statusCode, {
+          status: error.geminiStatus,
+          message: error.message,
+        }, cors.headers);
+      }
       if (error instanceof AssistantError) {
         return jsonResponse(error.statusCode, { error: error.message }, cors.headers);
       }

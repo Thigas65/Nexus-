@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AssistantError, generateResponse } from "./geminiClient.mjs";
+import { AssistantError, generateResponse, GeminiApiError } from "./geminiClient.mjs";
 import { assistantPersonality, unknownProjectInformation } from "./personality.mjs";
 import { formatProjectSelfKnowledge, projectSelfKnowledge } from "./selfKnowledge.mjs";
 
@@ -141,11 +141,15 @@ test("reports Gemini authentication failures without exposing upstream details",
   await assert.rejects(
     generateResponse("Oi", {
       apiKey: "test-key",
-      fetchImpl: async () => new Response(null, { status: 403 }),
+      fetchImpl: async () => Response.json({
+        error: { message: "Invalid API key: test-key" },
+      }, { status: 403 }),
     }),
     (error) =>
-      error instanceof AssistantError &&
+      error instanceof GeminiApiError &&
       error.statusCode === 503 &&
+      error.geminiStatus === 403 &&
+      error.message === "Invalid API key: [REDACTED]" &&
       !error.message.includes("test-key"),
   );
 });
