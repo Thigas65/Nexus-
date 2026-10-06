@@ -1,7 +1,7 @@
 import { assistantPersonality, unknownProjectInformation } from "./personality.mjs";
 import { formatProjectSelfKnowledge } from "./selfKnowledge.mjs";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.8-flash";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export class AssistantError extends Error {
