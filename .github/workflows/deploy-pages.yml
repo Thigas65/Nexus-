@@ -38,6 +38,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: /Nexus-/
+          VITE_BACKEND_URL: https://fastidious-churros-998d9d.netlify.app
 
       - name: Upload frontend artifact
         uses: actions/upload-pages-artifact@v3
