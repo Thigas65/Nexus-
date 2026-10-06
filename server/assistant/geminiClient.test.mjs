@@ -35,7 +35,7 @@ test("sends the personality, context, and message to Gemini and returns its text
   assert.equal(reply, "As plantas transformam luz em energia.");
   assert.equal(
     requestUrl,
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
   );
   assert.equal(requestOptions.headers["x-goog-api-key"], "test-key");
   const body = JSON.parse(requestOptions.body);
