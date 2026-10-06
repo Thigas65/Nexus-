@@ -595,14 +595,14 @@ export function ChatPanel({
         ))}
 
         {isSending && (
-          <div className="message message--assistant" role="status" aria-label="Respondendo">
+          <div className="message message--assistant" role="status" aria-label="Processando resposta">
             <div className="message__avatar">
               <NexusMark small />
             </div>
             <div className="message__body">
               <div className="message__meta">
                 <strong>N.E.X.U.S.</strong>
-                <span>pensando</span>
+                <span>PROCESSANDO</span>
               </div>
               <div className="typing-indicator" aria-hidden="true">
                 <i />
