@@ -99,6 +99,23 @@ export async function generateResponse(
   }
 
   if (!response.ok) {
+    let geminiErrorMessage;
+    try {
+      const errorBody = await response.clone().json();
+      if (typeof errorBody.error?.message === "string") {
+        geminiErrorMessage = errorBody.error.message.replaceAll(
+          apiKey.trim(),
+          "[REDACTED]",
+        );
+      }
+    } catch {
+      geminiErrorMessage = "Não foi possível ler a mensagem de erro do Gemini.";
+    }
+    console.error("Gemini API error", {
+      status: response.status,
+      message: geminiErrorMessage,
+    });
+
     if (response.status === 401 || response.status === 403) {
       throw new AssistantError(
         "A autenticação do Gemini não está válida. Verifique a configuração do backend.",
