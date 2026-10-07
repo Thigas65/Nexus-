@@ -2,6 +2,13 @@ export interface SpeechSynthesisHandlers {
   onStart: () => void;
   onEnd: () => void;
   onError: (error: Error) => void;
+  onBoundary?: (intensity: number) => void;
+}
+
+function estimateWordIntensity(text: string): number {
+  const vowels = text.match(/[aeiouáéíóúâêôãõ]/gi)?.length ?? 0;
+  const punctuation = /[,.!?;:]$/.test(text) ? 0.1 : 0;
+  return Math.max(0.18, Math.min(0.9, 0.22 + Math.min(vowels, 5) * 0.12 - punctuation));
 }
 
 export class BrowserSpeechSynthesisService {
@@ -31,14 +38,25 @@ export class BrowserSpeechSynthesisService {
     utterance.onstart = () => {
       if (this.activeUtterance === utterance) handlers.onStart();
     };
+    utterance.onboundary = (event) => {
+      if (this.activeUtterance !== utterance || event.name === "sentence") return;
+      const remainingText = content.slice(event.charIndex);
+      const word =
+        event.charLength > 0
+          ? content.slice(event.charIndex, event.charIndex + event.charLength)
+          : remainingText.split(/\s/, 1)[0];
+      if (word) handlers.onBoundary?.(estimateWordIntensity(word));
+    };
     utterance.onend = () => {
       if (this.activeUtterance !== utterance) return;
       this.activeUtterance = null;
+      handlers.onBoundary?.(0);
       handlers.onEnd();
     };
     utterance.onerror = (event) => {
       if (this.activeUtterance !== utterance) return;
       this.activeUtterance = null;
+      handlers.onBoundary?.(0);
       if (event.error !== "canceled" && event.error !== "interrupted") {
         handlers.onError(new Error("Não foi possível reproduzir a resposta em voz."));
       } else {

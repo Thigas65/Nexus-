@@ -11,6 +11,7 @@ import type {
   AssistantService,
 } from "../domain/AssistantService";
 import type { AssistantActivityState } from "../domain/AssistantActivityState";
+import type { AssistantPresentation } from "../domain/AssistantPresentation";
 import type { Message } from "../domain/Message";
 import { BrowserSpeechSynthesisService } from "../services/SpeechSynthesisService";
 import type { VoiceService } from "../services/VoiceService";
@@ -23,6 +24,8 @@ interface ChatPanelProps {
   onMessagesChange: (messages: Message[] | ((current: Message[]) => Message[])) => void;
   onMessageSent: () => void;
   onActivityStateChange: (state: AssistantActivityState) => void;
+  onSpeechIntensityChange: (intensity: number) => void;
+  onPresentationChange: (presentation: AssistantPresentation | null) => void;
   speechEnabled?: boolean;
   mode: "chat" | "voice" | "closed";
   onClose: () => void;
@@ -61,12 +64,26 @@ function isNoSpeechError(error: Error): boolean {
   return "code" in error && error.code === "no-speech";
 }
 
+function shouldPresentResponse(question: string): boolean {
+  const normalized = question
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const mentionsDeputies = /\bdeputad[oa]s?\b/.test(normalized);
+  const requestsData =
+    /\b(mostre|exiba|apresente|visualize|pesquise|traga)\b/.test(normalized) &&
+    /\b(dados?|informacoes?|indicadores?|resultados?|relatorios?)\b/.test(normalized);
+  return mentionsDeputies || requestsData;
+}
+
 export function ChatPanel({
   assistantService,
   messages,
   onMessagesChange,
   onMessageSent,
   onActivityStateChange,
+  onSpeechIntensityChange,
+  onPresentationChange,
   speechEnabled = true,
   mode,
   onClose,
@@ -99,6 +116,8 @@ export function ChatPanel({
   const automaticSpeechEnabledRef = useRef(automaticSpeechEnabled);
   const wakeWordEnabledRef = useRef(false);
   const assistantStateRef = useRef<AssistantActivityState>("idle");
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
 
   const updateAssistantState = useCallback(
     (state: AssistantActivityState) => {
@@ -123,6 +142,13 @@ export function ChatPanel({
       window.localStorage.setItem("nexus-speech-enabled", String(automaticSpeechEnabled));
     }
   }, [automaticSpeechEnabled]);
+
+  useEffect(
+    () => () => {
+      requestControllerRef.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     scrollAreaRef.current?.scrollTo({
@@ -209,32 +235,44 @@ export function ChatPanel({
       unsubscribeWakeWordError();
       voiceRecognition.cancel();
       speechSynthesis.stop();
+      onSpeechIntensityChange(0);
       wakeWordService.stop();
     };
-  }, [resumeWakeWord, speechSynthesis, updateAssistantState, voiceRecognition, wakeWordService]);
+  }, [
+    onSpeechIntensityChange,
+    resumeWakeWord,
+    speechSynthesis,
+    updateAssistantState,
+    voiceRecognition,
+    wakeWordService,
+  ]);
 
   function speakResponse(content: string) {
     setSpeechError(null);
+    onSpeechIntensityChange(0);
     wakeWordService.stop();
-    updateAssistantState("speaking");
     try {
       speechSynthesis.speak(content, {
         onStart: () => {
           setIsSpeaking(true);
           updateAssistantState("speaking");
         },
+        onBoundary: onSpeechIntensityChange,
         onEnd: () => {
           setIsSpeaking(false);
+          onSpeechIntensityChange(0);
           resumeWakeWord();
         },
         onError: (synthesisError) => {
           setIsSpeaking(false);
+          onSpeechIntensityChange(0);
           setSpeechError(synthesisError.message);
           resumeWakeWord();
         },
       });
     } catch (synthesisError) {
       setIsSpeaking(false);
+      onSpeechIntensityChange(0);
       setSpeechError(
         synthesisError instanceof Error
           ? synthesisError.message
@@ -249,33 +287,68 @@ export function ChatPanel({
     context: AssistantContextMessage[],
   ) {
     setError(null);
+    onPresentationChange(null);
     setIsSending(true);
     updateAssistantState("processing");
     wakeWordService.stop();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    const assistantMessageId = crypto.randomUUID();
+    activeAssistantMessageIdRef.current = assistantMessageId;
+    onMessagesChange((current) => [
+      ...current,
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+      },
+    ]);
 
     try {
-      const response = await assistantService.sendMessage(content, context);
+      const response = await assistantService.sendMessage(content, context, {
+        signal: controller.signal,
+        onChunk: (chunk) => {
+          onMessagesChange((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? { ...message, content: message.content + chunk }
+                : message,
+            ),
+          );
+        },
+      });
       if (!response.trim()) {
         throw new Error("O assistente retornou uma resposta vazia.");
       }
 
-      onMessagesChange((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response,
-          createdAt: new Date(),
-        },
-      ]);
+      onMessagesChange((current) =>
+        current.map((message) =>
+          message.id === assistantMessageId ? { ...message, content: response } : message,
+        ),
+      );
+      if (shouldPresentResponse(content)) {
+        onPresentationChange({ question: content, answer: response });
+      }
       if (automaticSpeechEnabledRef.current) speakResponse(response);
     } catch (sendError) {
-      setError(
-        sendError instanceof Error
-          ? sendError.message
-          : "Não foi possível enviar sua mensagem. Tente novamente.",
-      );
+      if (!controller.signal.aborted) {
+        setError(
+          sendError instanceof Error
+            ? sendError.message
+            : "Não foi possível enviar sua mensagem. Tente novamente.",
+        );
+        onMessagesChange((current) =>
+          current.filter((message) =>
+            message.id !== assistantMessageId || message.content.length > 0,
+          ),
+        );
+      }
     } finally {
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+      if (activeAssistantMessageIdRef.current === assistantMessageId) {
+        activeAssistantMessageIdRef.current = null;
+      }
       setIsSending(false);
       if (assistantStateRef.current === "processing") resumeWakeWord();
       inputRef.current?.focus();
@@ -432,6 +505,7 @@ export function ChatPanel({
               onClick={() => {
                 speechSynthesis.stop();
                 setIsSpeaking(false);
+                onSpeechIntensityChange(0);
                 setSpeechError(null);
                 resumeWakeWord();
                 onMessagesChange([
@@ -443,6 +517,7 @@ export function ChatPanel({
                   },
                 ]);
                 setError(null);
+                onPresentationChange(null);
               }}
             >
               <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -590,28 +665,20 @@ export function ChatPanel({
                 )}
               </div>
               <p>{message.content}</p>
+              {isSending && message.id === activeAssistantMessageIdRef.current && (
+                <>
+                  <span role="status">PROCESSANDO</span>
+                  <div className="typing-indicator" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </>
+              )}
             </div>
           </article>
         ))}
 
-        {isSending && (
-          <div className="message message--assistant" role="status" aria-label="Processando resposta">
-            <div className="message__avatar">
-              <NexusMark small />
-            </div>
-            <div className="message__body">
-              <div className="message__meta">
-                <strong>N.E.X.U.S.</strong>
-                <span>PROCESSANDO</span>
-              </div>
-              <div className="typing-indicator" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </div>
-            </div>
-          </div>
-        )}
         {error && (
           <div className="chat-error" role="alert">
             <span>{error}</span>
@@ -681,6 +748,7 @@ export function ChatPanel({
                 if (!event.target.checked) {
                   speechSynthesis.stop();
                   setIsSpeaking(false);
+                  onSpeechIntensityChange(0);
                   setSpeechError(null);
                   resumeWakeWord();
                 }
@@ -695,6 +763,7 @@ export function ChatPanel({
               onClick={() => {
                 speechSynthesis.stop();
                 setIsSpeaking(false);
+                onSpeechIntensityChange(0);
                 resumeWakeWord();
               }}
             >

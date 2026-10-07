@@ -443,24 +443,63 @@ input:focus-visible {
 
 .core-orbit {
   position: absolute;
-  border: 1px solid rgba(101, 188, 215, 0.12);
+  border: 1px solid rgba(90, 205, 244, 0.22);
   border-radius: 50%;
-  box-shadow: inset 0 0 25px rgba(128, 213, 242, 0.04);
+  box-shadow: 0 0 12px rgba(40, 170, 219, 0.08), inset 0 0 25px rgba(48, 173, 216, 0.035);
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .core-orbit--outer {
-  inset: 2%;
-  border-style: dashed;
-  border-color: rgba(101, 188, 215, 0.14);
-  animation: orbit 50s linear infinite;
+  inset: 3% 1%;
+  border-color: rgba(97, 205, 246, 0.3);
+  transform: rotateX(68deg);
+  animation: core-orbit-spin 38s linear infinite;
 }
 
 .core-wrap--waiting-for-wake-word .core-orbit--outer {
-  animation-duration: 100s;
+  animation-duration: 70s;
+}
+
+.core-orbit--middle {
+  inset: 10% 5%;
+  border-color: rgba(41, 159, 225, 0.24);
+  transform: rotateY(64deg);
+  animation: core-orbit-spin-y 31s linear infinite reverse;
+}
+
+.core-orbit--inner {
+  inset: 18% 9%;
+  border-color: rgba(107, 227, 255, 0.25);
+  transform: rotateX(68deg);
+  animation: core-orbit-spin 24s linear infinite reverse;
+}
+
+.core-orbit--near {
+  inset: 7% 15%;
+  border-color: rgba(36, 137, 215, 0.3);
+  transform: rotateY(64deg);
+  animation: core-orbit-spin-y 28s linear infinite;
+}
+
+.core-orbit__particle {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9cecff;
+  box-shadow: 0 0 7px 2px rgba(89, 214, 255, 0.72), 0 0 17px rgba(39, 160, 255, 0.65);
 }
 
 .core-wrap--idle .core {
   animation: core-idle-breathe 4.8s ease-in-out infinite;
+}
+
+.core-wrap--idle .core-orbit--middle,
+.core-wrap--waiting-for-wake-word .core-orbit--middle {
+  animation-duration: 48s;
 }
 
 .core-wrap--waiting-for-wake-word .core {
@@ -477,6 +516,10 @@ input:focus-visible {
 
 .core-wrap--processing .core-orbit--middle {
   animation: core-ring-energize 0.9s ease-in-out infinite;
+}
+
+.core-wrap--processing .core-orbit__particle {
+  box-shadow: 0 0 9px 3px rgba(89, 214, 255, 0.9), 0 0 22px rgba(39, 160, 255, 0.78);
 }
 
 .core-wrap--connecting .core {
@@ -496,110 +539,116 @@ input:focus-visible {
   animation: core-shell-breath 2.4s ease-in-out infinite;
 }
 
+.core-wrap--speaking .core-orbit__particle {
+  box-shadow: 0 0 10px 3px rgba(120, 230, 255, 0.95), 0 0 24px rgba(39, 160, 255, 0.85);
+}
+
 .core-wrap--paused .core {
   opacity: 0.65;
   filter: saturate(0.7);
 }
 
 .core-wrap--error .core {
-  border-color: rgba(232, 160, 150, 0.6);
+  border-color: rgba(232, 160, 150, 0.42);
   box-shadow:
-    0 0 26px rgba(232, 160, 150, 0.15),
-    0 0 73px rgba(129, 72, 67, 0.17),
+    0 0 22px rgba(232, 160, 150, 0.1),
+    0 0 55px rgba(129, 72, 67, 0.12),
     inset -10px -12px 28px rgba(20, 8, 10, 0.7),
-    inset 8px 8px 25px rgba(255, 182, 176, 0.12);
-  animation: core-error-flash 1.2s ease-in-out infinite;
-}
-
-.core-orbit--middle {
-  inset: 10%;
-  border-color: rgba(101, 188, 215, 0.2);
-  box-shadow: 0 0 40px rgba(34, 131, 164, 0.07);
-}
-
-.core-orbit--inner {
-  inset: 18%;
-  border-color: rgba(101, 188, 215, 0.1);
+    inset 8px 8px 25px rgba(255, 182, 176, 0.09);
 }
 
 .core {
   position: relative;
   display: grid;
-  width: 40%;
+  width: 56%;
   aspect-ratio: 1;
   place-items: center;
   overflow: hidden;
   border: 1px solid rgba(154, 226, 247, 0.6);
   border-radius: 50%;
   background:
-    radial-gradient(circle at 37% 30%, rgba(126, 222, 251, 0.8), transparent 20%),
-    radial-gradient(circle at 50% 55%, #2d94b5 0, #13516a 38%, #0a2334 71%, #0b151f 100%);
+    radial-gradient(circle at 34% 25%, rgba(154, 242, 255, 0.82), transparent 14%),
+    radial-gradient(circle at 40% 32%, rgba(35, 176, 232, 0.72), transparent 36%),
+    radial-gradient(circle at 58% 67%, #126d9d 0, #0c3c68 43%, #071b36 76%, #071321 100%);
   box-shadow:
-    0 0 26px rgba(57, 179, 218, 0.34),
-    0 0 73px rgba(35, 127, 159, 0.22),
-    inset -10px -12px 28px rgba(1, 10, 19, 0.7),
-    inset 8px 8px 25px rgba(159, 235, 251, 0.23);
+    0 0 32px rgba(37, 159, 220, 0.42),
+    0 0 86px rgba(18, 111, 188, 0.32),
+    inset -16px -18px 35px rgba(1, 8, 24, 0.76),
+    inset 10px 10px 32px rgba(118, 231, 255, 0.28);
+  isolation: isolate;
   transition: box-shadow 220ms ease, filter 220ms ease, transform 220ms ease;
 }
 
 .core::before,
 .core::after {
   position: absolute;
-  inset: -18%;
-  border: 1px solid rgba(166, 239, 255, 0.2);
-  border-radius: 42%;
+  inset: -8%;
+  border: 1px solid rgba(144, 237, 255, 0.25);
+  border-radius: 47%;
   content: "";
   transform-origin: center;
 }
 
 .core::before {
-  transform: rotate(34deg) scale(1);
+  transform: rotate(34deg) scaleX(0.7);
 }
 
 .core::after {
-  transform: rotate(-34deg) scale(1);
+  transform: rotate(-34deg) scaleX(0.7);
 }
 
 .core__shine {
   position: absolute;
-  top: 14%;
-  left: 25%;
-  width: 29%;
+  z-index: 1;
+  top: 10%;
+  left: 20%;
+  width: 42%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: rgba(213, 250, 255, 0.55);
-  filter: blur(10px);
+  background: rgba(167, 244, 255, 0.48);
+  filter: blur(16px);
+  pointer-events: none;
 }
 
-.core__glyph {
-  position: relative;
-  z-index: 1;
-  color: rgba(216, 249, 255, 0.85);
-  font-family: "Segoe UI", sans-serif;
-  font-size: 52px;
-  font-weight: 400;
-  text-shadow: 0 0 22px rgba(203, 247, 255, 0.75);
-}
-
-.core-dot {
+.core__filaments {
   position: absolute;
-  width: 5px;
-  height: 5px;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: #90e2f6;
-  box-shadow: 0 0 11px #73d4ef;
+  pointer-events: none;
 }
 
-.core-dot--one {
-  top: 17%;
-  right: 23%;
+.core__energy {
+  position: absolute;
+  inset: -30%;
+  z-index: 1;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 30deg, transparent 0 18%, rgba(51, 195, 255, 0.08) 23%, rgba(123, 236, 255, 0.48) 27%, transparent 34% 53%, rgba(17, 135, 255, 0.28) 61%, transparent 69%),
+    radial-gradient(ellipse at 48% 44%, transparent 32%, rgba(48, 195, 255, 0.3) 50%, transparent 68%);
+  mix-blend-mode: screen;
+  opacity: 0.8;
+  animation: core-energy-flow 14s linear infinite;
+  pointer-events: none;
 }
 
-.core-dot--two {
-  bottom: 23%;
-  left: 11%;
-  width: 3px;
-  height: 3px;
+.core__mark {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  width: 46%;
+  height: 46%;
+  place-items: center;
+  filter: drop-shadow(0 0 9px rgba(116, 230, 255, 0.7));
+  opacity: 0.96;
+  user-select: none;
+}
+
+.core__mark .nexus-mark {
+  width: 100%;
+  height: 100%;
 }
 
 .core-caption {
@@ -1126,7 +1175,19 @@ input:focus-visible {
   color: #788493;
 }
 
-@keyframes orbit {
+@keyframes core-orbit-spin {
+  to {
+    transform: rotateX(68deg) rotateZ(360deg);
+  }
+}
+
+@keyframes core-orbit-spin-y {
+  to {
+    transform: rotateY(64deg) rotateZ(360deg);
+  }
+}
+
+@keyframes core-energy-flow {
   to {
     transform: rotate(360deg);
   }
@@ -1229,29 +1290,22 @@ input:focus-visible {
   }
 }
 
-@keyframes core-error-flash {
-  0%,
-  100% {
-    transform: scale(1);
-    filter: saturate(0.7);
-  }
-
-  50% {
-    transform: scale(1.03);
-    filter: saturate(1.2) brightness(1.05);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .core-orbit,
+  .core__energy {
+    animation: none !important;
+  }
+
   .core-wrap--idle .core,
   .core-wrap--waiting-for-wake-word .core,
   .core-wrap--listening .core,
   .core-wrap--processing .core,
   .core-wrap--processing .core-orbit--middle,
+  .core-wrap--connecting .core,
+  .core-wrap--connecting .core-orbit--middle,
   .core-wrap--speaking .core,
   .core-wrap--speaking .core::before,
-  .core-wrap--speaking .core::after,
-  .core-wrap--error .core {
+  .core-wrap--speaking .core::after {
     animation: none;
   }
 }
@@ -1883,6 +1937,394 @@ input:focus-visible {
 
 .core-stage--home {
   display: grid;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.workspace {
+  position: relative;
+  z-index: 1;
+}
+
+.nexus-background {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(11, 73, 131, 0.2), transparent 48%),
+    radial-gradient(ellipse at 12% 82%, rgba(13, 107, 180, 0.11), transparent 34%),
+    linear-gradient(160deg, rgba(7, 17, 33, 0.34), rgba(3, 8, 17, 0.08) 62%);
+  pointer-events: none;
+}
+
+.nexus-background__grid {
+  position: absolute;
+  inset: -38%;
+  opacity: 0.3;
+  background-image:
+    linear-gradient(rgba(58, 159, 229, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 159, 229, 0.11) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 45%, transparent 18%, rgba(24, 138, 220, 0.15) 18.2%, transparent 18.5%, transparent 30%, rgba(24, 138, 220, 0.1) 30.2%, transparent 30.5%);
+  background-size: 54px 54px, 54px 54px, 100% 100%;
+  mask-image: radial-gradient(ellipse at center, #000 13%, transparent 76%);
+  transform: perspective(1000px) rotateX(56deg) scale(1.3);
+  animation: nexus-grid-drift 52s linear infinite;
+}
+
+.nexus-background__scanline {
+  position: absolute;
+  top: -4%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: rgba(77, 194, 255, 0.42);
+  box-shadow: 0 0 18px 3px rgba(35, 143, 255, 0.18);
+  animation: nexus-scan 18s linear infinite;
+}
+
+.nexus-background__particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #8ce8ff;
+  box-shadow: 0 0 8px 2px rgba(64, 174, 255, 0.64);
+  opacity: 0.42;
+  animation: nexus-particle-drift 5.5s ease-in-out infinite alternate;
+}
+
+.home-screen {
+  position: relative;
+}
+
+.nexus-presentation {
+  position: fixed;
+  z-index: 5;
+  inset: 84px 4vw 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.nexus-presentation__projection {
+  position: relative;
+  display: grid;
+  width: clamp(150px, 19vw, 250px);
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+  place-items: center;
+  filter: drop-shadow(0 0 28px rgba(38, 170, 255, 0.3));
+  animation: nexus-projection-appear 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.nexus-presentation__projection::before {
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(42, 179, 255, 0.18), transparent 68%);
+  content: "";
+}
+
+.nexus-presentation__projection-ring {
+  position: absolute;
+  inset: 6%;
+  border: 1px solid rgba(99, 215, 255, 0.42);
+  border-radius: 50%;
+  box-shadow: inset 0 0 22px rgba(27, 150, 255, 0.1), 0 0 16px rgba(27, 150, 255, 0.12);
+  transform: rotateX(68deg);
+  animation: nexus-projection-orbit 22s linear infinite;
+}
+
+.nexus-presentation__projection-ring--inner {
+  inset: 21%;
+  border-color: rgba(74, 170, 255, 0.35);
+  transform: rotateY(64deg);
+  animation: nexus-projection-orbit-y 16s linear infinite reverse;
+}
+
+.nexus-presentation__projection-mark {
+  position: relative;
+  z-index: 1;
+  width: 32%;
+  color: #a5efff;
+  filter: drop-shadow(0 0 10px rgba(86, 215, 255, 0.8));
+  animation: nexus-projection-pulse 3.2s ease-in-out infinite;
+}
+
+.nexus-presentation__projection-mark .nexus-mark {
+  width: 100%;
+  height: 100%;
+}
+
+.nexus-presentation__projection-beam {
+  position: absolute;
+  right: 23%;
+  bottom: 8%;
+  left: 23%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(103, 228, 255, 0.9), transparent);
+  box-shadow: 0 0 16px 4px rgba(36, 159, 255, 0.24);
+}
+
+.nexus-presentation__panel {
+  width: min(37vw, 450px);
+  max-height: min(68svh, 650px);
+  overflow: auto;
+  padding: clamp(17px, 2vw, 27px);
+  border: 1px solid rgba(90, 191, 247, 0.48);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(16, 62, 110, 0.88), rgba(5, 15, 34, 0.94) 70%),
+    rgba(5, 14, 30, 0.94);
+  box-shadow:
+    0 0 0 1px rgba(82, 194, 255, 0.08),
+    0 0 34px rgba(18, 140, 234, 0.18),
+    inset 0 0 28px rgba(55, 161, 235, 0.06);
+  color: #e6f6ff;
+  pointer-events: auto;
+  scrollbar-color: rgba(77, 173, 226, 0.5) transparent;
+  animation: nexus-panel-appear 580ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.nexus-presentation__eyebrow,
+.nexus-presentation__footer,
+.nexus-presentation__card-index {
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+}
+
+.nexus-presentation__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #73dfff;
+  font-size: 9px;
+}
+
+.nexus-presentation__status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #68e3ff;
+  box-shadow: 0 0 10px rgba(82, 219, 255, 0.9);
+}
+
+.nexus-presentation__panel h2 {
+  margin: 16px 0 8px;
+  color: #f0faff;
+  font-size: clamp(15px, 1.8vw, 21px);
+  font-weight: 600;
+  letter-spacing: 0.045em;
+}
+
+.nexus-presentation__question {
+  margin: 0 0 16px;
+  color: #9ec8dc;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.nexus-presentation__sections {
+  display: grid;
+  gap: 8px;
+}
+
+.nexus-presentation__card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 11px 12px;
+  border: 1px solid rgba(89, 181, 234, 0.26);
+  border-radius: 5px;
+  background: linear-gradient(100deg, rgba(17, 81, 137, 0.46), rgba(9, 32, 65, 0.44));
+  opacity: 0;
+  animation: nexus-card-appear 460ms ease-out forwards;
+}
+
+.nexus-presentation__card-index {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid rgba(85, 211, 255, 0.56);
+  border-radius: 4px;
+  background: rgba(29, 140, 207, 0.24);
+  color: #9ceaff;
+  font-size: 9px;
+}
+
+.nexus-presentation__card p {
+  margin: 2px 0 0;
+  color: #d5e9f4;
+  font-size: 11px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.nexus-presentation__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(107, 182, 222, 0.2);
+  color: #6f9fb6;
+  font-size: 7px;
+}
+
+.nexus-presentation--leaving .nexus-presentation__projection {
+  animation: nexus-projection-disappear 400ms ease-in both;
+}
+
+.nexus-presentation--leaving .nexus-presentation__panel {
+  animation: nexus-panel-disappear 400ms ease-in both;
+}
+
+@keyframes nexus-grid-drift {
+  to {
+    background-position: 54px 54px, 54px 54px, 0 0;
+  }
+}
+
+@keyframes nexus-scan {
+  to {
+    transform: translateY(110vh);
+  }
+}
+
+@keyframes nexus-particle-drift {
+  to {
+    transform: translate3d(0, -12px, 0);
+    opacity: 0.86;
+  }
+}
+
+@keyframes nexus-projection-appear {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes nexus-projection-disappear {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+}
+
+@keyframes nexus-projection-orbit {
+  to {
+    transform: rotateX(68deg) rotateZ(360deg);
+  }
+}
+
+@keyframes nexus-projection-orbit-y {
+  to {
+    transform: rotateY(64deg) rotateZ(360deg);
+  }
+}
+
+@keyframes nexus-projection-pulse {
+  50% {
+    opacity: 0.66;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes nexus-panel-appear {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nexus-panel-disappear {
+  to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.98);
+  }
+}
+
+@keyframes nexus-card-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .nexus-background__grid {
+    inset: -20%;
+    opacity: 0.22;
+    background-size: 42px 42px, 42px 42px, 100% 100%;
+    transform: perspective(800px) rotateX(58deg) scale(1.45);
+  }
+
+  .nexus-presentation {
+    position: relative;
+    inset: auto;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin: -16px auto 15px;
+    padding: 0 4px;
+  }
+
+  .nexus-presentation__projection {
+    position: absolute;
+    top: -66px;
+    right: 4px;
+    width: 72px;
+    opacity: 0.68;
+  }
+
+  .nexus-presentation__panel {
+    width: 100%;
+    max-height: 34svh;
+    padding: 14px;
+  }
+
+  .nexus-presentation__panel h2 {
+    max-width: calc(100% - 60px);
+    font-size: 14px;
+  }
+
+  .nexus-presentation__question {
+    max-width: calc(100% - 45px);
+  }
+
+  .nexus-presentation__card p {
+    font-size: 10px;
+  }
+
+  .home-screen--presenting .core-stage--home {
+    height: clamp(245px, 38svh, 360px);
+  }
+
+  .home-screen--panel-open.home-screen--presenting .core-stage--home {
+    height: clamp(180px, 25svh, 235px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

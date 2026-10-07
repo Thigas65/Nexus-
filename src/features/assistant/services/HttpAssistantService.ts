@@ -2,11 +2,7 @@ import type {
   AssistantContextMessage,
   AssistantService,
 } from "../domain/AssistantService";
-
-interface ChatResponse {
-  reply?: unknown;
-  error?: unknown;
-}
+import { consumeChatResponse } from "./chatStream.mjs";
 
 const BACKEND_URL_STORAGE_KEY = "nexus-backend-url";
 const DEFAULT_LOCAL_BACKEND_URL = "http://10.0.2.2:3001";
@@ -47,6 +43,7 @@ export class HttpAssistantService implements AssistantService {
   async sendMessage(
     message: string,
     context: AssistantContextMessage[],
+    options: { onChunk?: (chunk: string) => void; signal?: AbortSignal } = {},
   ): Promise<string> {
     const requestUrl = new URL("/api/chat", this.baseUrl);
     let response: Response;
@@ -54,32 +51,18 @@ export class HttpAssistantService implements AssistantService {
     try {
       response = await fetch(requestUrl.toString(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream, application/json",
+        },
         body: JSON.stringify({ message, context }),
+        signal: options.signal,
       });
-    } catch {
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
       throw new Error("Não foi possível conectar ao servidor. Verifique se o backend do N.E.X.U.S. está em execução.");
     }
 
-    let result: ChatResponse;
-    try {
-      result = (await response.json()) as ChatResponse;
-    } catch {
-      throw new Error("O servidor retornou uma resposta inválida. Tente novamente.");
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        typeof result.error === "string"
-          ? result.error
-          : "Não foi possível obter uma resposta do assistente. Tente novamente.",
-      );
-    }
-
-    if (typeof result.reply !== "string" || !result.reply.trim()) {
-      throw new Error("O assistente retornou uma resposta vazia. Tente novamente.");
-    }
-
-    return result.reply;
+    return consumeChatResponse(response, options.onChunk);
   }
 }

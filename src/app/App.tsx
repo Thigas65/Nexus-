@@ -3,7 +3,10 @@ import { ChatPanel } from "../features/assistant/components/ChatPanel";
 import type { AssistantActivityState } from "../features/assistant/domain/AssistantActivityState";
 import type { Message } from "../features/assistant/domain/Message";
 import { NexusCore } from "../features/assistant/components/NexusCore";
+import { NexusBackground } from "../features/assistant/components/NexusBackground";
 import { NexusMark } from "../features/assistant/components/NexusMark";
+import { NexusPresentation } from "../features/assistant/components/NexusPresentation";
+import type { AssistantPresentation } from "../features/assistant/domain/AssistantPresentation";
 import { HttpAssistantService, resolveBackendUrl } from "../features/assistant/services/HttpAssistantService";
 
 const BACKEND_URL_STORAGE_KEY = "nexus-backend-url";
@@ -26,6 +29,8 @@ function App() {
   const [speechEnabled, setSpeechEnabled] = useState<boolean>(() => readStoredBoolean(SPEECH_ENABLED_STORAGE_KEY, true));
   const [messageCount, setMessageCount] = useState(0);
   const [assistantState, setAssistantState] = useState<AssistantActivityState>("idle");
+  const [speechIntensity, setSpeechIntensity] = useState(0);
+  const [presentation, setPresentation] = useState<AssistantPresentation | null>(null);
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: "welcome",
@@ -47,6 +52,17 @@ function App() {
     }
   }, [speechEnabled]);
 
+  useEffect(() => {
+    if (activePanel) return;
+    setPresentation(null);
+  }, [activePanel]);
+
+  useEffect(() => {
+    if (!presentation || assistantState === "speaking" || assistantState === "processing") return;
+    const timeout = window.setTimeout(() => setPresentation(null), 8_000);
+    return () => window.clearTimeout(timeout);
+  }, [assistantState, presentation]);
+
   const assistantService = useMemo(
     () => new HttpAssistantService({ baseUrl: backendUrl }),
     [backendUrl],
@@ -54,6 +70,7 @@ function App() {
 
   return (
     <main className="app-shell">
+      <NexusBackground />
       <section className="workspace">
         <header className="topbar">
           <a className="brand" href={import.meta.env.BASE_URL} aria-label="N.E.X.U.S. início">
@@ -108,10 +125,12 @@ function App() {
           </div>
         )}
 
-        <div className={`home-screen${activePanel ? " home-screen--panel-open" : ""}`}>
+        <div
+          className={`home-screen${activePanel ? " home-screen--panel-open" : ""}${presentation ? " home-screen--presenting" : ""}`}
+        >
           <div className="core-stage core-stage--home">
             <div className="core-stage__grid" />
-            <NexusCore state={assistantState} />
+            <NexusCore state={assistantState} speechIntensity={speechIntensity} />
             <div className="core-caption">
               <span className="core-caption__pulse" />
               NEXUS CORE
@@ -134,6 +153,8 @@ function App() {
             </div>
             <div className="core-coordinates">NX-01&nbsp;&nbsp; · &nbsp;&nbsp;ANDROID</div>
           </div>
+
+          <NexusPresentation data={presentation} />
 
           <div className="home-actions" aria-label="Ações principais">
             <button
@@ -168,6 +189,8 @@ function App() {
             onMessagesChange={setMessages}
             onMessageSent={() => setMessageCount((count) => count + 1)}
             onActivityStateChange={setAssistantState}
+            onSpeechIntensityChange={setSpeechIntensity}
+            onPresentationChange={setPresentation}
             speechEnabled={speechEnabled}
             mode={activePanel ?? "closed"}
             onClose={() => setActivePanel(null)}
