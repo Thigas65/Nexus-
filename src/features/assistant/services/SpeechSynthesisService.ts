@@ -11,6 +11,10 @@ function estimateWordIntensity(text: string): number {
   return Math.max(0.18, Math.min(0.9, 0.22 + Math.min(vowels, 5) * 0.12 - punctuation));
 }
 
+export function prepareTextForSpeech(text: string): string {
+  return text.replace(/\bN\s*\.?\s*E\s*\.?\s*X\s*\.?\s*U\s*\.?\s*S\.?(?![\p{L}\p{N}])/giu, "Nexus");
+}
+
 export class BrowserSpeechSynthesisService {
   private activeUtterance: SpeechSynthesisUtterance | null = null;
 
@@ -23,7 +27,7 @@ export class BrowserSpeechSynthesisService {
   }
 
   speak(text: string, handlers: SpeechSynthesisHandlers): void {
-    const content = text.trim();
+    const content = prepareTextForSpeech(text).trim();
     if (!content) {
       throw new Error("Não há texto para falar.");
     }

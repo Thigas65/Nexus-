@@ -34,7 +34,7 @@ export const projectSelfKnowledge = {
     speechSynthesis:
       "A interface usa a API de síntese de voz do navegador para falar respostas em português (pt-BR), sem enviar áudio ao backend.",
     wakeWord:
-      "Há uma primeira implementação web da palavra de ativação N.E.X.U.S., desativada por padrão e iniciada somente após ação explícita do usuário. Ela reconhece fala final pela API do navegador enquanto a página está aberta e o navegador permite.",
+      "A preferência Escuta do N.E.X.U.S. é salva localmente. Com o reconhecimento de fala do navegador compatível e autorizado, a escuta inicia ao abrir o app e funciona somente enquanto a página está visível e em primeiro plano; pode depender de rede e do navegador.",
   },
   currentState: {
     webInterface: "A interface web React está implementada.",
@@ -47,6 +47,8 @@ export const projectSelfKnowledge = {
       "A implementação local da camada de memória persistente está disponível, com gravação somente mediante autorização explícita.",
     personality:
       "A personalidade está configurada separadamente no servidor e é incluída nas instruções do assistente.",
+    nativeVoice:
+      "O app Android atual usa a BridgeActivity padrão e declara RECORD_AUDIO, mas não implementa serviço de microfone em primeiro plano nem detector nativo de palavra de ativação. O wake word web não funciona com o app fechado ou em segundo plano.",
     selfKnowledge:
       "O autoconhecimento é baseado nesta documentação estruturada do projeto, incluída nas instruções enviadas ao assistente.",
     toolArchitecture:
@@ -103,13 +105,13 @@ export const projectSelfKnowledge = {
       get_connection_status: "Consulta status e autorização verificada sem iniciar conexões.",
     },
     visualInterface:
-      "A interface visual atual usa fundo escuro, identidade azul e um Nexus Core 3D com estados visuais para idle, waiting-for-wake-word, listening, processing, speaking, paused e error.",
+      "A interface principal usa um fundo holográfico azul em grade e filamentos orbitais ciano que reagem aos estados idle, waiting-for-wake-word, listening, processing, speaking, paused e error; o chat é aberto sob demanda.",
     voiceInput:
-      "O reconhecimento de voz preenche o mesmo campo de texto da conversa. O usuário pode revisar e editar a transcrição e a envia pelo fluxo de mensagem existente.",
+      "Após detectar Nexus, o reconhecimento captura um comando final e o envia pelo fluxo de mensagem existente; não há botão de microfone na interface.",
     voiceOutput:
       "As respostas do assistente podem ser faladas pela API SpeechSynthesis do navegador. A fala automática pode ser desativada, cada resposta pode ser reproduzida novamente e a fala atual pode ser interrompida.",
     wakeWord:
-      "Quando ativada pelo usuário, a implementação web detecta N.E.X.U.S. usando reconhecimento de voz do navegador, pausa essa detecção e captura o comando para o campo de mensagem. A palavra de ativação é removida e não é enviada ao Gemini; o comando não é enviado automaticamente.",
+      "A preferência de escuta fica salva no dispositivo. Com o app visível e a permissão disponível, a API de voz do navegador detecta Nexus, responde 'Sim, senhor.', captura o pedido e o envia automaticamente ao backend. Ao sair do app, o reconhecimento é interrompido e pode ser retomado quando ele voltar ao primeiro plano.",
     limitations: [
       "Os resultados de ferramentas são encaminhados ao Gemini para compor a resposta; a chave do Gemini continua necessária para concluir /api/chat.",
       "O relógio e a data são informados em UTC, e a calculadora aceita somente expressões aritméticas limitadas.",
@@ -120,8 +122,8 @@ export const projectSelfKnowledge = {
       "A camada de memória persistente local não é conectada automaticamente à conversa.",
       "O reconhecimento de voz depende do suporte do navegador e da permissão de microfone.",
       "A síntese de voz depende do suporte e das vozes disponíveis no navegador ou sistema operacional.",
-      "A palavra de ativação funciona somente com a página aberta e enquanto o navegador permitir reconhecimento de voz; depende da permissão de microfone e pode não estar disponível em todos os navegadores.",
-      "A palavra de ativação não funciona com o aplicativo fechado ou a tela bloqueada; não há wake word nativa Android nem escuta em segundo plano.",
+      "A escuta depende do suporte e da permissão de microfone do navegador, pode depender de rede e é pausada quando a página sai do primeiro plano.",
+      "A palavra de ativação não funciona com o aplicativo fechado ou a tela bloqueada; não há detector local, serviço em primeiro plano ou wake word nativa Android.",
       "O aplicativo não grava nem armazena áudio. O navegador pode processar o reconhecimento usando serviços próprios conforme suas configurações e política de privacidade.",
       "Não há funcionamento em segundo plano no Android nem aplicativo Android nativo.",
       "Não há voz personalizada nem clonagem de voz.",

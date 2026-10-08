@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import type { AssistantActivityState } from "../domain/AssistantActivityState";
-import { NexusMark } from "./NexusMark";
 
 interface NexusCoreProps {
   state: AssistantActivityState;
@@ -50,99 +49,93 @@ export function NexusCore({ state, speechIntensity }: NexusCoreProps) {
       const elapsed = motionPreference.matches ? 0 : time / 1000;
       const pulse =
         activity === "speaking"
-          ? Math.max(0, voice)
+          ? Math.max(0.22, voice)
           : activity === "listening"
-            ? 0.16 + Math.sin(elapsed * 2.4) * 0.08
+            ? 0.28 + Math.sin(elapsed * 2.4) * 0.16
             : activity === "processing" || activity === "connecting"
-              ? 0.34 + Math.sin(elapsed * 3.2) * 0.12
+              ? 0.42 + Math.sin(elapsed * 3.2) * 0.2
               : activity === "idle" || activity === "waiting-for-wake-word"
-                ? 0.045 + Math.sin(elapsed * 1.1) * 0.025
-                : 0.03;
+                ? 0.08 + Math.sin(elapsed * 1.1) * 0.045
+                : 0.04;
 
       context.clearRect(0, 0, width, height);
       const centerX = width / 2;
       const centerY = height / 2;
-      const radius = Math.min(width, height) * 0.47 * (1 + pulse * 0.055);
+      const radius = Math.min(width, height) * 0.44 * (1 + pulse * 0.075);
       const glow = context.createRadialGradient(
         centerX,
         centerY,
-        radius * 0.12,
+        radius * 0.48,
         centerX,
         centerY,
-        radius,
+        radius * 1.55,
       );
-      glow.addColorStop(0, `rgba(26, 158, 245, ${0.08 + pulse * 0.1})`);
-      glow.addColorStop(0.72, `rgba(28, 179, 255, ${0.035 + pulse * 0.055})`);
+      glow.addColorStop(0, `rgba(26, 158, 245, ${0.025 + pulse * 0.045})`);
+      glow.addColorStop(0.7, `rgba(28, 179, 255, ${0.035 + pulse * 0.07})`);
       glow.addColorStop(1, "rgba(24, 154, 255, 0)");
       context.fillStyle = glow;
       context.fillRect(0, 0, width, height);
 
       context.save();
       context.globalCompositeOperation = "lighter";
-      const yaw = elapsed * (0.13 + pulse * 0.1);
-      const tilt = 0.43 + Math.sin(elapsed * 0.24) * 0.07;
-      const drawFilament = (latitude: number, longitude: number, meridian: boolean) => {
+      const rotation = elapsed * (0.09 + pulse * 0.12);
+      const tilt = 0.36 + Math.sin(elapsed * 0.23) * 0.08;
+      const filamentCount = 12;
+      const segments = 128;
+
+      for (let filament = 0; filament < filamentCount; filament += 1) {
+        const phase = filament * 2.399;
+        const direction = filament % 2 === 0 ? 1 : -1;
+        const orientation = phase * 0.41 + rotation * direction;
+        const horizontalScale = 0.9 + (filament % 4) * 0.035;
+        const verticalScale = 0.76 + (filament % 5) * 0.045;
         context.beginPath();
-        const segments = 88;
         for (let index = 0; index <= segments; index += 1) {
           const angle = (index / segments) * Math.PI * 2;
-          const curveAngle = meridian ? latitude + angle : angle;
-          const curveLatitude = meridian ? longitude : latitude;
           const wobble =
             1 +
-            Math.sin(angle * 3 + longitude + elapsed * 0.7) *
-              (0.012 + pulse * 0.022);
-          let x: number;
-          let y: number;
-          let z: number;
-          if (meridian) {
-            x = Math.sin(curveAngle) * Math.cos(curveLatitude) * radius * wobble;
-            y = Math.sin(curveLatitude) * radius * wobble;
-            z = Math.cos(curveAngle) * Math.cos(curveLatitude) * radius * wobble;
-          } else {
-            x = Math.cos(curveLatitude) * Math.cos(angle + longitude) * radius * wobble;
-            y = Math.sin(curveLatitude) * radius * wobble;
-            z = Math.cos(curveLatitude) * Math.sin(angle + longitude) * radius * wobble;
-          }
-
-          const rotatedX = x * Math.cos(yaw) - z * Math.sin(yaw);
-          const rotatedZ = x * Math.sin(yaw) + z * Math.cos(yaw);
-          const rotatedY = y * Math.cos(tilt) - rotatedZ * Math.sin(tilt);
-          const depth = y * Math.sin(tilt) + rotatedZ * Math.cos(tilt);
-          const perspective = 0.88 + (depth / radius) * 0.12;
+            Math.sin(angle * (2 + filament % 3) + phase + elapsed * 0.74) *
+              (0.018 + pulse * 0.032) +
+            Math.sin(angle * 5 - phase * 0.7 - elapsed * 0.42) * 0.012;
+          const x = Math.cos(angle) * radius * horizontalScale * wobble;
+          const y = Math.sin(angle) * radius * verticalScale * wobble;
+          const depth = Math.sin(angle * 2 + phase + rotation) * radius * 0.13;
+          const tiltedY = y * Math.cos(tilt) - depth * Math.sin(tilt);
+          const rotatedX = x * Math.cos(orientation) - tiltedY * Math.sin(orientation);
+          const rotatedY = x * Math.sin(orientation) + tiltedY * Math.cos(orientation);
+          const perspective = 0.94 + (depth / radius) * 0.16;
           const pointX = centerX + rotatedX * perspective;
           const pointY = centerY + rotatedY * perspective;
           if (index === 0) context.moveTo(pointX, pointY);
           else context.lineTo(pointX, pointY);
         }
 
-        const hue = 191 + Math.sin(longitude * 2 + elapsed * 0.35) * 12;
-        context.strokeStyle = `hsla(${hue}, 100%, 73%, ${0.12 + pulse * 0.11})`;
-        context.lineWidth = 0.55 + pulse * 0.5;
-        context.shadowBlur = 5 + pulse * 10;
-        context.shadowColor = "rgba(51, 194, 255, 0.78)";
+        const hue =
+          activity === "error"
+            ? 8 + Math.sin(phase + elapsed * 0.35) * 8
+            : 188 + Math.sin(phase + elapsed * 0.35) * 13;
+        context.strokeStyle = `hsla(${hue}, 100%, 70%, ${0.2 + pulse * 0.23})`;
+        context.lineWidth = 0.7 + pulse * 0.72;
+        context.shadowBlur = 7 + pulse * 15;
+        context.shadowColor =
+          activity === "error" ? "rgba(255, 130, 115, 0.7)" : "rgba(51, 194, 255, 0.78)";
         context.stroke();
-      };
-
-      for (let index = 0; index < 27; index += 1) {
-        const latitude = -1.43 + (index / 26) * 2.86;
-        drawFilament(latitude, index * 0.38, false);
-      }
-      for (let index = 0; index < 18; index += 1) {
-        const longitude = -1.38 + (index / 17) * 2.76;
-        drawFilament(index * 0.35, longitude, true);
       }
 
-      context.shadowBlur = 11 + pulse * 14;
-      context.fillStyle = `rgba(120, 229, 255, ${0.58 + pulse * 0.32})`;
-      for (let index = 0; index < 12; index += 1) {
-        const angle = index * 2.399 + elapsed * (0.12 + pulse * 0.14);
-        const distance = radius * (0.76 + Math.sin(index * 1.9 + elapsed) * 0.08);
+      context.shadowBlur = 12 + pulse * 18;
+      context.fillStyle =
+        activity === "error"
+          ? `rgba(255, 177, 160, ${0.48 + pulse * 0.24})`
+          : `rgba(120, 229, 255, ${0.62 + pulse * 0.3})`;
+      for (let index = 0; index < 7; index += 1) {
+        const angle = index * 2.399 + elapsed * (0.28 + pulse * 0.24);
+        const distance =
+          radius * (0.78 + Math.sin(index * 1.9 + elapsed * 0.68) * 0.12);
         context.beginPath();
         context.arc(
           centerX + Math.cos(angle) * distance,
-          centerY + Math.sin(angle * 1.13) * distance,
-          0.8 + pulse * 1.2,
+          centerY + Math.sin(angle * 1.08) * distance * 0.88,
+          1 + pulse * 1.6,
           0,
           Math.PI * 2,
         );
@@ -199,25 +192,8 @@ export function NexusCore({ state, speechIntensity }: NexusCoreProps) {
       aria-label={`Nexus Core: ${stateLabels[state].toLowerCase()}`}
       data-state={state}
     >
-      <div className="core-orbit core-orbit--outer" aria-hidden="true">
-        <span className="core-orbit__particle" />
-      </div>
-      <div className="core-orbit core-orbit--middle" aria-hidden="true">
-        <span className="core-orbit__particle" />
-      </div>
-      <div className="core-orbit core-orbit--inner" aria-hidden="true">
-        <span className="core-orbit__particle" />
-      </div>
-      <div className="core-orbit core-orbit--near" aria-hidden="true">
-        <span className="core-orbit__particle" />
-      </div>
       <div className="core">
-        <div className="core__shine" />
-        <div className="core__energy" aria-hidden="true" />
         <canvas className="core__filaments" ref={canvasRef} aria-hidden="true" />
-        <span className="core__mark">
-          <NexusMark />
-        </span>
       </div>
     </div>
   );

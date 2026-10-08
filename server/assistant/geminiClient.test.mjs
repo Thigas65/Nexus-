@@ -104,7 +104,8 @@ test("keeps personality and project facts in separate server-side sources", () =
   assert.equal(projectSelfKnowledge.currentArchitecture.backend, "Node.js");
   assert.match(projectSelfKnowledge.currentArchitecture.persistentMemoryPrivacy, /não salva informações automaticamente/);
   assert.match(formatProjectSelfKnowledge(), /GEMINI_API_KEY/);
-  assert.match(projectSelfKnowledge.currentState.wakeWord, /não é enviada ao Gemini/);
+  assert.match(projectSelfKnowledge.currentState.wakeWord, /detecta Nexus/);
+  assert.match(projectSelfKnowledge.currentArchitecture.wakeWord, /salva localmente/);
   assert.match(projectSelfKnowledge.currentState.limitations.join(" "), /não funciona com o aplicativo fechado/);
   assert.match(projectSelfKnowledge.currentState.toolArchitecture, /conectada ao fluxo de \/api\/chat/);
   assert.match(projectSelfKnowledge.currentState.builtInTools.calculator, /não usa eval/);

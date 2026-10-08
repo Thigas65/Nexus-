@@ -22,12 +22,12 @@ interface ChatPanelProps {
   assistantService: AssistantService;
   messages: Message[];
   onMessagesChange: (messages: Message[] | ((current: Message[]) => Message[])) => void;
-  onMessageSent: () => void;
+  backendUrl: string;
+  onBackendUrlChange: (url: string) => void;
   onActivityStateChange: (state: AssistantActivityState) => void;
   onSpeechIntensityChange: (intensity: number) => void;
   onPresentationChange: (presentation: AssistantPresentation | null) => void;
-  speechEnabled?: boolean;
-  mode: "chat" | "voice" | "closed";
+  mode: "chat" | "closed";
   onClose: () => void;
 }
 
@@ -38,6 +38,8 @@ const suggestions = [
 ];
 const maxContextMessages = 40;
 const maxContextCharacters = 32_000;
+const wakeWordStorageKey = "nexus-wake-word-enabled";
+const speechStorageKey = "nexus-speech-enabled";
 
 function buildAssistantContext(messages: Message[]): AssistantContextMessage[] {
   const context: AssistantContextMessage[] = [];
@@ -80,11 +82,11 @@ export function ChatPanel({
   assistantService,
   messages,
   onMessagesChange,
-  onMessageSent,
+  backendUrl,
+  onBackendUrlChange,
   onActivityStateChange,
   onSpeechIntensityChange,
   onPresentationChange,
-  speechEnabled = true,
   mode,
   onClose,
 }: ChatPanelProps) {
@@ -101,20 +103,29 @@ export function ChatPanel({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
-  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(() =>
+    typeof window !== "undefined" && window.localStorage.getItem(wakeWordStorageKey) === "true",
+  );
   const [wakeWordError, setWakeWordError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [assistantState, setAssistantState] = useState<AssistantActivityState>("idle");
   const [automaticSpeechEnabled, setAutomaticSpeechEnabled] = useState(() => {
-    if (typeof window === "undefined") return speechEnabled && isSpeechSupported;
-    const stored = window.localStorage.getItem("nexus-speech-enabled");
-    if (stored !== null) return stored === "true" && isSpeechSupported;
-    return speechEnabled && isSpeechSupported;
+    if (typeof window === "undefined") return isSpeechSupported;
+    const stored = window.localStorage.getItem(speechStorageKey);
+    return stored === null ? isSpeechSupported : stored === "true" && isSpeechSupported;
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const voiceDraftPrefixRef = useRef("");
   const automaticSpeechEnabledRef = useRef(automaticSpeechEnabled);
-  const wakeWordEnabledRef = useRef(false);
+  const wakeWordEnabledRef = useRef(wakeWordEnabled);
+  const isSendingRef = useRef(false);
+  const isRecordingRef = useRef(false);
+  const pendingVoiceCommandRef = useRef("");
+  const speechPendingRef = useRef(false);
+  const speechFinishedRef = useRef<(() => void) | null>(null);
+  const sendMessageRef = useRef<(value: string) => void>(() => {});
+  const commandCaptureRef = useRef<() => void>(() => {});
+  const wakeWordHandlerRef = useRef<(command: string) => void>(() => {});
   const assistantStateRef = useRef<AssistantActivityState>("idle");
   const requestControllerRef = useRef<AbortController | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
@@ -129,9 +140,12 @@ export function ChatPanel({
   );
 
   const resumeWakeWord = useCallback(() => {
-    if (wakeWordEnabledRef.current) {
+    if (isSendingRef.current || assistantStateRef.current === "processing") return;
+    if (wakeWordEnabledRef.current && !document.hidden) {
       wakeWordService.start();
       if (wakeWordEnabledRef.current) updateAssistantState("waiting-for-wake-word");
+    } else if (wakeWordEnabledRef.current) {
+      updateAssistantState("paused");
     } else {
       updateAssistantState("idle");
     }
@@ -139,9 +153,14 @@ export function ChatPanel({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("nexus-speech-enabled", String(automaticSpeechEnabled));
+      window.localStorage.setItem(speechStorageKey, String(automaticSpeechEnabled));
     }
+    automaticSpeechEnabledRef.current = automaticSpeechEnabled;
   }, [automaticSpeechEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(wakeWordStorageKey, String(wakeWordEnabled));
+  }, [wakeWordEnabled]);
 
   useEffect(
     () => () => {
@@ -158,74 +177,11 @@ export function ChatPanel({
   }, [messages, isSending]);
 
   useEffect(() => {
-    if (mode === "closed" && (isRecording || isVoiceStarting)) {
-      voiceRecognition.stopListening();
-    }
-  }, [isRecording, isVoiceStarting, mode, voiceRecognition]);
-
-  useEffect(() => {
-    if (mode !== "closed" || !wakeWordEnabledRef.current) return;
-    wakeWordEnabledRef.current = false;
-    setWakeWordEnabled(false);
-    wakeWordService.stop();
-    updateAssistantState("idle");
-  }, [mode, updateAssistantState, wakeWordService]);
-
-  useEffect(() => {
-    const unsubscribeWakeWord = wakeWordService.onWakeWord((command) => {
-      setWakeWordError(null);
-      if (command) {
-        updateAssistantState("listening");
-        setDraft(command);
-        resumeWakeWord();
-        return;
-      }
-
-      try {
-        setIsVoiceStarting(true);
-        voiceRecognition.startListening({
-          onStart: () => {
-            setIsVoiceStarting(false);
-            setIsRecording(true);
-            updateAssistantState("listening");
-          },
-          onTranscript: (transcript) => setDraft(transcript),
-          onError: (recognitionError) => {
-            setIsVoiceStarting(false);
-            setIsRecording(false);
-            setVoiceError(recognitionError.message);
-            if (isNoSpeechError(recognitionError)) return;
-            wakeWordEnabledRef.current = false;
-            setWakeWordEnabled(false);
-            wakeWordService.stop();
-            updateAssistantState("error");
-          },
-          onEnd: () => {
-            setIsVoiceStarting(false);
-            setIsRecording(false);
-            inputRef.current?.focus();
-            resumeWakeWord();
-          },
-        });
-      } catch (recognitionError) {
-        setIsVoiceStarting(false);
-        setIsRecording(false);
-        setVoiceError(
-          recognitionError instanceof Error
-            ? recognitionError.message
-            : "Não foi possível iniciar o reconhecimento do comando.",
-        );
-        if (wakeWordEnabledRef.current) {
-          wakeWordEnabledRef.current = false;
-          setWakeWordEnabled(false);
-          wakeWordService.stop();
-        }
-        updateAssistantState("error");
-      }
-    });
+    const unsubscribeWakeWord = wakeWordService.onWakeWord((command) =>
+      wakeWordHandlerRef.current(command),
+    );
     const unsubscribeWakeWordError = wakeWordService.onError((serviceError) => {
       wakeWordEnabledRef.current = false;
-      setWakeWordEnabled(false);
       setWakeWordError(serviceError.message);
       updateAssistantState("error");
     });
@@ -247,30 +203,71 @@ export function ChatPanel({
     wakeWordService,
   ]);
 
-  function speakResponse(content: string) {
+  useEffect(() => {
+    if (wakeWordEnabledRef.current) resumeWakeWord();
+  }, [resumeWakeWord]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        wakeWordService.stop();
+        voiceRecognition.cancel();
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setIsVoiceStarting(false);
+        if (assistantStateRef.current === "listening" || assistantStateRef.current === "waiting-for-wake-word") {
+          updateAssistantState("paused");
+        }
+        return;
+      }
+
+      if (
+        wakeWordEnabledRef.current &&
+        (assistantStateRef.current === "paused" || assistantStateRef.current === "waiting-for-wake-word")
+      ) {
+        resumeWakeWord();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [resumeWakeWord, updateAssistantState, voiceRecognition, wakeWordService]);
+
+  function speakResponse(content: string, onFinished: () => void = resumeWakeWord) {
     setSpeechError(null);
     onSpeechIntensityChange(0);
     wakeWordService.stop();
+    speechPendingRef.current = true;
+    speechFinishedRef.current = onFinished;
     try {
       speechSynthesis.speak(content, {
         onStart: () => {
+          speechPendingRef.current = false;
           setIsSpeaking(true);
           updateAssistantState("speaking");
         },
         onBoundary: onSpeechIntensityChange,
         onEnd: () => {
+          speechPendingRef.current = false;
+          speechFinishedRef.current = null;
           setIsSpeaking(false);
           onSpeechIntensityChange(0);
-          resumeWakeWord();
+          updateAssistantState("idle");
+          onFinished();
         },
         onError: (synthesisError) => {
+          speechPendingRef.current = false;
+          speechFinishedRef.current = null;
           setIsSpeaking(false);
           onSpeechIntensityChange(0);
           setSpeechError(synthesisError.message);
-          resumeWakeWord();
+          updateAssistantState("idle");
+          onFinished();
         },
       });
     } catch (synthesisError) {
+      speechPendingRef.current = false;
+      speechFinishedRef.current = null;
       setIsSpeaking(false);
       onSpeechIntensityChange(0);
       setSpeechError(
@@ -278,8 +275,20 @@ export function ChatPanel({
           ? synthesisError.message
           : "Não foi possível reproduzir a resposta em voz.",
       );
-      resumeWakeWord();
+      updateAssistantState("idle");
+      onFinished();
     }
+  }
+
+  function stopCurrentSpeech() {
+    const onFinished = speechFinishedRef.current;
+    speechFinishedRef.current = null;
+    speechPendingRef.current = false;
+    speechSynthesis.stop();
+    setIsSpeaking(false);
+    onSpeechIntensityChange(0);
+    updateAssistantState("idle");
+    (onFinished ?? resumeWakeWord)();
   }
 
   async function requestResponse(
@@ -288,6 +297,7 @@ export function ChatPanel({
   ) {
     setError(null);
     onPresentationChange(null);
+    isSendingRef.current = true;
     setIsSending(true);
     updateAssistantState("processing");
     wakeWordService.stop();
@@ -349,15 +359,22 @@ export function ChatPanel({
       if (activeAssistantMessageIdRef.current === assistantMessageId) {
         activeAssistantMessageIdRef.current = null;
       }
+      isSendingRef.current = false;
       setIsSending(false);
-      if (assistantStateRef.current === "processing") resumeWakeWord();
+      if (
+        assistantStateRef.current === "processing" &&
+        !speechPendingRef.current
+      ) {
+        updateAssistantState("idle");
+        resumeWakeWord();
+      }
       inputRef.current?.focus();
     }
   }
 
   async function sendMessage(value: string) {
     const content = value.trim();
-    if (!content || isSending || isRecording) return;
+    if (!content || isSendingRef.current || isRecordingRef.current) return;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -369,9 +386,87 @@ export function ChatPanel({
     const nextMessages = [...messages, userMessage];
     onMessagesChange(nextMessages);
     setDraft("");
-    onMessageSent();
     await requestResponse(content, buildAssistantContext(nextMessages));
   }
+
+  function startCommandCapture() {
+    if (!wakeWordEnabledRef.current || document.hidden) {
+      resumeWakeWord();
+      return;
+    }
+
+    pendingVoiceCommandRef.current = "";
+    setVoiceError(null);
+    setIsVoiceStarting(true);
+    try {
+      voiceRecognition.startListening({
+        onStart: () => {
+          setIsVoiceStarting(false);
+          isRecordingRef.current = true;
+          setIsRecording(true);
+          updateAssistantState("listening");
+        },
+        onTranscript: (transcript) => setDraft(transcript),
+        onFinalTranscript: (transcript) => {
+          pendingVoiceCommandRef.current = transcript;
+          setDraft(transcript);
+        },
+        onError: (recognitionError) => {
+          setIsVoiceStarting(false);
+          setVoiceError(recognitionError.message);
+          if (!isNoSpeechError(recognitionError)) updateAssistantState("error");
+        },
+        onEnd: () => {
+          setIsVoiceStarting(false);
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          const command = pendingVoiceCommandRef.current.trim();
+          pendingVoiceCommandRef.current = "";
+          if (command) sendMessageRef.current(command);
+          else resumeWakeWord();
+        },
+      });
+    } catch (recognitionError) {
+      setIsVoiceStarting(false);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setVoiceError(
+        recognitionError instanceof Error
+          ? recognitionError.message
+          : "Não foi possível iniciar o reconhecimento do comando.",
+      );
+      updateAssistantState("error");
+    }
+  }
+
+  sendMessageRef.current = (value) => {
+    void sendMessage(value);
+  };
+  commandCaptureRef.current = startCommandCapture;
+  wakeWordHandlerRef.current = (command) => {
+    setWakeWordError(null);
+    updateAssistantState("listening");
+    onMessagesChange((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Sim, senhor.",
+        createdAt: new Date(),
+      },
+    ]);
+
+    const continueAfterAcknowledgment = () => {
+      if (command) sendMessageRef.current(command);
+      else commandCaptureRef.current();
+    };
+
+    if (automaticSpeechEnabledRef.current && isSpeechSupported) {
+      speakResponse("Sim, senhor.", continueAfterAcknowledgment);
+    } else {
+      continueAfterAcknowledgment();
+    }
+  };
 
   function retryLastMessage() {
     let lastUserIndex = messages.length - 1;
@@ -391,62 +486,15 @@ export function ChatPanel({
     void sendMessage(draft);
   }
 
-  function toggleVoiceRecognition() {
-    setVoiceError(null);
-
-    if (isRecording) {
-      voiceRecognition.stopListening();
-      return;
-    }
-    if (isVoiceStarting) {
-      voiceRecognition.stopListening();
-      return;
-    }
-
-    wakeWordService.stop();
-    voiceDraftPrefixRef.current = draft.trimEnd();
-    try {
-      setIsVoiceStarting(true);
-      voiceRecognition.startListening({
-        onStart: () => {
-          setIsVoiceStarting(false);
-          setIsRecording(true);
-          updateAssistantState("listening");
-        },
-        onTranscript: (transcript) => {
-          const prefix = voiceDraftPrefixRef.current;
-          setDraft(prefix ? `${prefix} ${transcript}` : transcript);
-        },
-        onError: (recognitionError) => {
-          setIsVoiceStarting(false);
-          setIsRecording(false);
-          setVoiceError(recognitionError.message);
-          updateAssistantState("error");
-        },
-        onEnd: () => {
-          setIsVoiceStarting(false);
-          setIsRecording(false);
-          inputRef.current?.focus();
-          resumeWakeWord();
-        },
-      });
-    } catch (recognitionError) {
-      setIsVoiceStarting(false);
-      setIsRecording(false);
-      setVoiceError(
-        recognitionError instanceof Error
-          ? recognitionError.message
-          : "Não foi possível iniciar o reconhecimento de voz.",
-      );
-      resumeWakeWord();
-    }
-  }
-
   function toggleWakeWord(enabled: boolean) {
     setWakeWordError(null);
     wakeWordEnabledRef.current = enabled;
     setWakeWordEnabled(enabled);
     if (enabled) {
+      if (document.hidden) {
+        updateAssistantState("paused");
+        return;
+      }
       try {
         wakeWordService.start();
         if (wakeWordEnabledRef.current) updateAssistantState("waiting-for-wake-word");
@@ -462,69 +510,94 @@ export function ChatPanel({
       }
     } else {
       wakeWordService.stop();
-      updateAssistantState("paused");
+      voiceRecognition.cancel();
+      pendingVoiceCommandRef.current = "";
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setIsVoiceStarting(false);
+      if (
+        assistantStateRef.current !== "processing" &&
+        assistantStateRef.current !== "speaking"
+      ) {
+        updateAssistantState("idle");
+      }
     }
   }
 
   if (mode === "closed") return null;
+  const isListening = assistantState === "waiting-for-wake-word" || assistantState === "listening";
 
   return (
     <section
       className={`chat-panel chat-panel--${mode}`}
-      aria-label={mode === "chat" ? "Conversa com N.E.X.U.S." : "Interface de voz do N.E.X.U.S."}
+      aria-label="Conversa com N.E.X.U.S."
     >
       <header className="chat-header">
         <div className="chat-header__identity">
           <NexusMark small />
           <div>
-            <h2>{mode === "chat" ? "N.E.X.U.S." : "MODO DE VOZ"}</h2>
+            <h2>N.E.X.U.S.</h2>
             <span className="chat-header__status">
-              <span className={`status-dot${isRecording ? " status-dot--active" : ""}`} />
-              {mode === "chat"
-                ? "Assistente pessoal"
-                : voiceError
-                  ? "Falha no microfone ou reconhecimento"
-                  : isVoiceStarting
-                  ? "Solicitando permissão"
-                  : isRecording
-                    ? "Microfone ativo"
-                    : isVoiceSupported
-                      ? "Reconhecimento disponível"
-                      : "Reconhecimento indisponível"}
+              <span className={`status-dot${wakeWordEnabled && isListening && !document.hidden ? " status-dot--active" : ""}`} />
+              {wakeWordError ??
+                (assistantState === "processing"
+                  ? "Verificando"
+                  : assistantState === "speaking"
+                    ? "Falando"
+                    : assistantState === "paused"
+                      ? "Escuta pausada"
+                      : isListening
+                        ? "Diga “Nexus”"
+                        : wakeWordEnabled
+                          ? "Escuta ativada"
+                          : "Assistente pessoal")}
             </span>
           </div>
         </div>
         <div className="chat-header__actions">
-          {mode === "chat" && (
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Nova conversa"
-              title="Nova conversa"
-              disabled={isSending}
-              onClick={() => {
-                speechSynthesis.stop();
-                setIsSpeaking(false);
-                onSpeechIntensityChange(0);
-                setSpeechError(null);
-                resumeWakeWord();
-                onMessagesChange([
-                  {
-                    id: "welcome",
-                    role: "assistant",
-                    content: "Olá! Sou o N.E.X.U.S. Como posso ajudar você hoje?",
-                    createdAt: new Date(),
-                  },
-                ]);
-                setError(null);
-                onPresentationChange(null);
-              }}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 4v12M4 10h12" />
-              </svg>
-            </button>
-          )}
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={showSettings ? "Fechar configurações" : "Abrir configurações"}
+            aria-expanded={showSettings}
+            title="Configurações"
+            onClick={() => setShowSettings((current) => !current)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 3v2M10 15v2M3.5 10h2M14.5 10h2M5.2 5.2l1.4 1.4M13.4 13.4l1.4 1.4M5.2 14.8l1.4-1.4M13.4 6.6l1.4-1.4" />
+              <circle cx="10" cy="10" r="2.4" />
+            </svg>
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Nova conversa"
+            title="Nova conversa"
+            disabled={isSending}
+            onClick={() => {
+              speechSynthesis.stop();
+              speechPendingRef.current = false;
+              setIsSpeaking(false);
+              onSpeechIntensityChange(0);
+              updateAssistantState("idle");
+              setSpeechError(null);
+              resumeWakeWord();
+              onMessagesChange([
+                {
+                  id: "welcome",
+                  role: "assistant",
+                  content: "Estou por aqui, senhor. O que precisa?",
+                  createdAt: new Date(),
+                },
+              ]);
+              setError(null);
+              onPresentationChange(null);
+            }}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" />
+            </svg>
+          </button>
           <button
             className="icon-button"
             type="button"
@@ -539,96 +612,29 @@ export function ChatPanel({
         </div>
       </header>
 
-      {mode === "voice" ? (
-        <div className="voice-interface">
-          <div
-            className={`voice-interface__indicator${isRecording ? " voice-interface__indicator--active" : ""}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className="voice-interface__pulse" />
-            <strong>
-              {voiceError
-                ? "Não foi possível iniciar a voz"
-                : isVoiceStarting
-                ? "Solicitando acesso ao microfone"
-                : isRecording
-                  ? "Microfone ativo"
-                  : isVoiceSupported
-                    ? "Pronto para ouvir"
-                    : "Reconhecimento de voz indisponível"}
-            </strong>
-            <span>
-              {isVoiceStarting
-                ? "Confirme a permissão de microfone do sistema para continuar."
-                : isRecording
-                  ? "Fale sua mensagem; a transcrição aparecerá abaixo."
-                  : isVoiceSupported
-                    ? "Toque no microfone para iniciar a captura."
-                    : "Este navegador não oferece a API de reconhecimento de fala."}
-            </span>
-          </div>
-          <button
-            className={`voice-interface__button${isRecording ? " voice-interface__button--active" : ""}`}
-            type="button"
-            aria-label={
-              isVoiceStarting
-                ? "Cancelar solicitação do microfone"
-                : isRecording
-                  ? "Parar captura de voz"
-                  : "Iniciar captura de voz"
-            }
-            aria-pressed={isRecording}
-            disabled={!isVoiceSupported || isSending}
-            onClick={toggleVoiceRecognition}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="9" y="3" width="6" height="12" rx="3" />
-              <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" />
-            </svg>
-          </button>
-          <span className="voice-interface__action">
-            {isVoiceStarting
-              ? "AGUARDANDO PERMISSÃO"
-              : isRecording
-                ? "TOQUE PARA PARAR"
-                : isVoiceSupported
-                  ? "INICIAR CAPTURA"
-                  : "INDISPONÍVEL NESTE NAVEGADOR"}
-          </span>
-          <form className="voice-interface__composer" onSubmit={handleSubmit}>
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={isVoiceSupported ? "A transcrição aparecerá aqui..." : "Reconhecimento não compatível"}
-              aria-label="Transcrição da mensagem de voz"
-              autoComplete="off"
-              disabled={isSending || isRecording || isVoiceStarting || !isVoiceSupported}
-            />
-            <button className="send-button" type="submit" aria-label="Enviar transcrição" disabled={!draft.trim() || isSending || isRecording || isVoiceStarting}>
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M3 10 17 3l-4 14-3.5-5.5L3 10Z" />
-                <path d="M9.5 11.5 17 3" />
-              </svg>
+      {showSettings && (
+        <div className="settings-panel chat-settings" aria-label="Configurações do N.E.X.U.S.">
+          <div className="settings-panel__header">
+            <strong>Configurações</strong>
+            <button type="button" className="settings-close" onClick={() => setShowSettings(false)}>
+              Fechar
             </button>
-          </form>
-          {voiceError && (
-            <p className="voice-feedback voice-feedback--error" role="alert">
-              {voiceError}
-            </p>
-          )}
-          {error && (
-            <div className="chat-error" role="alert">
-              <span>{error}</span>
-              <button type="button" onClick={retryLastMessage}>
-                Tentar novamente
-              </button>
-            </div>
-          )}
+          </div>
+          <label className="settings-field">
+            <span>Endpoint do backend</span>
+            <input
+              type="url"
+              value={backendUrl}
+              onChange={(event) => onBackendUrlChange(event.target.value.trim() || "")}
+              placeholder="http://10.0.2.2:3001"
+            />
+          </label>
+          <p className="settings-note">
+            Em Android, o emulador costuma usar <strong>10.0.2.2</strong> para acessar o backend local.
+          </p>
         </div>
-      ) : (
-        <>
+      )}
+
       <div className="chat-messages" ref={scrollAreaRef} aria-live="polite">
         <div className="conversation-date">HOJE</div>
         {messages.map((message) => (
@@ -710,26 +716,20 @@ export function ChatPanel({
             <input
               type="checkbox"
               checked={wakeWordEnabled}
-              disabled={!isVoiceSupported || isRecording || isSending}
+              disabled={!isVoiceSupported && !wakeWordEnabled}
               onChange={(event) => toggleWakeWord(event.target.checked)}
             />
-            <span>Palavra de ativação experimental: {wakeWordEnabled ? "Ativada" : "Desativada"}</span>
+            <span>Escuta do N.E.X.U.S.: {wakeWordEnabled ? "Ativada" : "Desativada"}</span>
           </label>
-          {wakeWordEnabled && (
-            <span className="wake-word-status">
-              {assistantState === "listening"
-                ? "Fale seu comando."
-                : "Aguardando “N.E.X.U.S.”"}
-            </span>
-          )}
+          {wakeWordEnabled && <span className="wake-word-status">Diga “Nexus”</span>}
           {!isVoiceSupported && (
             <span className="speech-feedback">
-              Palavra de ativação indisponível neste navegador.
+              Reconhecimento de fala indisponível neste navegador.
             </span>
           )}
         </div>
         <p className="wake-word-note">
-          Usa o reconhecimento do navegador, pode depender de rede e só funciona com o app aberto; não é detecção local em segundo plano.
+          Usa o reconhecimento do navegador e pode depender de rede. A escuta funciona com o app aberto e em primeiro plano; é interrompida ao sair da tela. Não é detecção local nem funciona com o app fechado.
         </p>
         {wakeWordError && (
           <p className="voice-feedback voice-feedback--error" role="alert">
@@ -746,11 +746,10 @@ export function ChatPanel({
                 setAutomaticSpeechEnabled(event.target.checked);
                 automaticSpeechEnabledRef.current = event.target.checked;
                 if (!event.target.checked) {
-                  speechSynthesis.stop();
-                  setIsSpeaking(false);
-                  onSpeechIntensityChange(0);
                   setSpeechError(null);
-                  resumeWakeWord();
+                  if (speechPendingRef.current || assistantStateRef.current === "speaking") {
+                    stopCurrentSpeech();
+                  }
                 }
               }}
             />
@@ -760,12 +759,7 @@ export function ChatPanel({
             <button
               className="speech-stop"
               type="button"
-              onClick={() => {
-                speechSynthesis.stop();
-                setIsSpeaking(false);
-                onSpeechIntensityChange(0);
-                resumeWakeWord();
-              }}
+              onClick={stopCurrentSpeech}
             >
               Parar fala
             </button>
@@ -782,34 +776,14 @@ export function ChatPanel({
             placeholder="Escreva uma mensagem..."
             aria-label="Mensagem para N.E.X.U.S."
             autoComplete="off"
-            disabled={isSending || isRecording}
+            disabled={isSending || isRecording || isVoiceStarting}
           />
           <span className="composer__hint">Enter para enviar</span>
-          <button
-            className={`voice-button${isRecording ? " voice-button--recording" : ""}`}
-            type="button"
-            aria-label={isRecording ? "Parar reconhecimento de voz" : "Ditar mensagem"}
-            title={
-              isVoiceSupported
-                ? isRecording
-                  ? "Parar reconhecimento de voz"
-                  : "Ditar mensagem"
-                : "Reconhecimento de voz indisponível neste navegador"
-            }
-            aria-pressed={isRecording}
-            disabled={!isVoiceSupported || isSending}
-            onClick={toggleVoiceRecognition}
-          >
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <rect x="7" y="3" width="6" height="10" rx="3" />
-              <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v3M7.5 18h5" />
-            </svg>
-          </button>
           <button
             className="send-button"
             type="submit"
             aria-label="Enviar mensagem"
-            disabled={!draft.trim() || isSending || isRecording}
+            disabled={!draft.trim() || isSending || isRecording || isVoiceStarting}
           >
             <svg viewBox="0 0 20 20" aria-hidden="true">
               <path d="M3 10 17 3l-4 14-3.5-5.5L3 10Z" />
@@ -819,7 +793,12 @@ export function ChatPanel({
         </form>
         {isRecording && (
           <p className="voice-feedback" role="status">
-            Ouvindo… fale sua mensagem. A transcrição aparecerá no campo acima.
+            Ouvindo o comando do senhor…
+          </p>
+        )}
+        {isVoiceStarting && (
+          <p className="voice-feedback" role="status">
+            Preparando o reconhecimento de voz…
           </p>
         )}
         {voiceError && (
@@ -836,8 +815,6 @@ export function ChatPanel({
           O histórico fica apenas nesta sessão. Memórias persistentes só serão salvas mediante ação explícita.
         </p>
       </div>
-        </>
-      )}
     </section>
   );
 }
